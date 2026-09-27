@@ -8,7 +8,7 @@ from .serializers import MenuItemSerializer
 from .models import MenuItem
 # Create your views here.
 
-@api_view()
+@api_view(['GET'])
 def MenuItems(request):
     if request.method == 'GET':
         menu_items = MenuItem.objects.all()
@@ -16,6 +16,7 @@ def MenuItems(request):
         return Response(serializer.data, status=status.HTTP_200_OK)
     else:
         return Response({'error': 'Method not allowed'}, 403)
+
 
 @api_view(['GET'])
 def MenuItemId(request, pk):
