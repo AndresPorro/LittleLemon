@@ -1,6 +1,5 @@
+from django.db import transaction
 # DRF Imports
-from urllib import request
-
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -32,29 +31,29 @@ def is_delivery_crew(user):
 @permission_classes([IsAuthenticatedOrReadOnly])
 def MenuItems(request):
     if request.method == 'GET':
-        items = MenuItem.objects.all()
-
+        items = MenuItem.objects.select_related('category').all()
         category_name = request.query_params.get('category')
+        to_price = request.query_params.get('to_price')
+        search = request.query_params.get('search')
+        ordering = request.query_params.get('ordering')
+        perpage = request.query_params.get('perpage', 4)
+        page = request.query_params.get('page', 1)
+
         if category_name:
             items = items.filter(category__title=category_name)
-
-        search = request.query_params.get('search')
+        if to_price:
+            items = items.filter(price__lte=to_price)
         if search:
             items = items.filter(title__icontains=search)
-
-        ordering = request.query_params.get('ordering')
         if ordering:
-            items = items.order_by(ordering)
+            ordering_fields = ordering.split(',')
+            items = items.order_by(*ordering_fields)
 
-        perpage = request.query_params.get('perpage', default=5)
-        page = request.query_params.get('page', default=1)
-        
         paginator = Paginator(items, per_page=perpage)
         try:
-            items = paginator.page(number=page)
+            items = paginator.page(page)
         except EmptyPage:
             items = []
-
         serializer = MenuItemSerializer(items, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -164,9 +163,12 @@ def CartMenuItems(request):
     if not is_customer(request.user):
         return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
 
-    if request.method == 'GET' and Cart.objects.filter(user=request.user).exists():
-        carts = Cart.objects.filter(user=request.user)
-        return Response(CartMenuItemsSerializer(carts, many=True).data, status=status.HTTP_200_OK)
+    if request.method == 'GET':
+        if Cart.objects.filter(user=request.user).exists(): 
+            carts = Cart.objects.filter(user=request.user)
+            return Response(CartMenuItemsSerializer(carts, many=True).data, status=status.HTTP_200_OK)
+        else: 
+            return Response({'error': 'El carrito está vacío'}, status=status.HTTP_404_NOT_FOUND)
 
     if request.method == 'POST':
         serializer = CartMenuItemsSerializer(data=request.data)
@@ -210,17 +212,16 @@ def Orders(request):
     if not cart_items.exists():
         return Response({'error': 'El carrito está vacío'}, status=status.HTTP_400_BAD_REQUEST)
 
-    total_price = sum(item.price for item in cart_items)
-    order = Order.objects.create(user=request.user, total=total_price)
-
-    for item in cart_items:
-        order.orderitem_set.create(
-            menuitem=item.menuitem,
-            quantity=item.quantity,
-            unit_price=item.unit_price,
-            price=item.price,
-        )
-
+    with transaction.atomic():
+        total_price = sum(item.price for item in cart_items)
+        order = Order.objects.create(user=request.user, total=total_price)
+        for item in cart_items:
+            order.orderitem_set.create(
+                menuitem=item.menuitem,
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                price=item.price,
+            )
     cart_items.delete()
     serializer = OrderSerializer(order)
     return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -232,12 +233,9 @@ def OrdersId(request, pk):
     order = get_object_or_404(Order, pk=pk)
 
     if request.method == 'GET':
-        if is_manager(request.user) or is_delivery_crew(request.user):
+        if is_manager(request.user) or order.user == request.user or order.delivery_crew == request.user:
             return Response(OrderSerializer(order).data, status=status.HTTP_200_OK)
-        elif is_customer(request.user) and order.user == request.user:
-            return Response(OrderSerializer(order).data, status=status.HTTP_200_OK)
-        else:
-            return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
+        return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
     
     if request.method == 'DELETE':
         if is_manager(request.user):
@@ -250,16 +248,15 @@ def OrdersId(request, pk):
     if request.method in ('PUT', 'PATCH'):
         if is_manager(request.user):
             serializer = OrderSerializer(order, data=request.data, partial=(request.method == 'PATCH'))
-            if serializer.is_valid():
-                serializer.save()
-                return Response(serializer.data, status=status.HTTP_200_OK)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-        elif is_delivery_crew(request.user):
-            serializer = DeliveryCrewOrderUpdateSerializer(order, data=request.data, partial=(request.method == 'PATCH'))
-            if serializer.is_valid():
-                serializer.save()
-                return Response(OrderSerializer(order).data, status=status.HTTP_200_OK)
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        elif is_delivery_crew(request.user) and order.delivery_crew == request.user and request.method == 'PATCH':
+            serializer = DeliveryCrewOrderUpdateSerializer(order, data=request.data, partial=True)
+        else:
+            return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
+
+        if serializer.is_valid():
+            serializer.save()
+            return Response(OrderSerializer(order).data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET', 'POST'])
