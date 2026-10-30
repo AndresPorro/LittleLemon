@@ -15,3 +15,6 @@ Configuración necesaria:
 DATABASE 
     USER = tu usuario
     PASSWORD = tu contrasenia
+
+Iniciar servidor
+    python manage.py runserver --insecure
