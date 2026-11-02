@@ -14,4 +14,4 @@ Configuración necesaria:
 
 DATABASE 
     USER = tu usuario
-    PASSWORD = tu contrasenia
+    PASSWORD = tu contraseña
