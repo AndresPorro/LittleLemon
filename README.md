@@ -38,6 +38,6 @@ Proyecto de un restaurante desarrollado con Django y Django REST Framework. Incl
 1. Cloná el repositorio y entrá a la carpeta del proyecto.
 2. Instalá las dependencias: `pipenv install`
 3. Activá el entorno: `pipenv shell`
-4. Configurá la base de datos en `settings.py` (en `DATABASES`, completá `USER` y `PASSWORD` con tus datos).
+4. Crea la base de datos en MySQL y configura tus credenciales: copia .env.example a .env y completa tus datos.
 5. Aplicá las migraciones: `python manage.py migrate`
 6. Iniciá el servidor: `python manage.py runserver`
