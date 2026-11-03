@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from rest_framework import generics, viewsets
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
-from .models import MenuItem, Booking
+from .models import Menu, Booking
 from .serializer import MenuItemSerializer, BookingSerializer
 from .forms import BookingForm
 from django.views.decorators.csrf import csrf_exempt
@@ -11,12 +11,12 @@ from django.core import serializers
 import json
 # Create your views here.
 class MenuItemView(generics.ListCreateAPIView):
-    queryset = MenuItem.objects.all()
+    queryset = Menu.objects.all()
     serializer_class = MenuItemSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]   
 
 class SingleMenuItemView(generics.RetrieveUpdateAPIView, generics.DestroyAPIView):
-    queryset = MenuItem.objects.all()
+    queryset = Menu.objects.all()
     serializer_class = MenuItemSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
@@ -32,9 +32,11 @@ def about(request):
     return render(request, 'about.html')
 
 def reservations(request):
+    date = request.GET.get('date', datetime.today().date())
     reservas = Booking.objects.all()
-    serializer = BookingSerializer(reservas)
-    return render(request, 'bookings.html', {"bookings": serializer})
+    booking_json = serializers.serialize('json', reservas)
+    booking_json = json.dumps(json.loads(booking_json), indent=2)
+    return render(request, 'bookings.html', {"bookings": booking_json})
 
 def book(request):
     form = BookingForm()
@@ -47,16 +49,16 @@ def book(request):
     return render(request, 'book.html', context)
 
 def menu(request):
-    menu_data = MenuItem.objects.all()
+    menu_data = Menu.objects.all()
     main_data = {"menu": menu_data}
     return render(request, 'menu.html', {"menu": main_data})
 
 def display_menu_item(request, pk=None): 
     if pk: 
-        menu_item = MenuItem.objects.get(pk=pk) 
+        menu_item = Menu.objects.get(pk=pk) 
     else: 
         menu_item = "" 
-    return render(request, 'menu_item.html', {"menu_item": menu_item})
+    return render(request, 'menu_item.html', {"menu_item": menu_item}) 
 
 @csrf_exempt
 def bookings(request):
